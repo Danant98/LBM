@@ -2,13 +2,12 @@
 
 # Importing libraries and modules
 import time, sys
+from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from tqdm import tqdm
 from numba import njit, prange
-
-np.random.seed(0)
 
 
 # Defining constants 
@@ -57,7 +56,6 @@ def macro(f: np.ndarray, c: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     vel = np.einsum('ia,iyx -> yxa', c, f) / r[..., None]
     vel[solid] = 0 # Set velocity to zero in solid nodes
     return r, vel
-
 
 def collide(f: np.ndarray, feq_: np.ndarray, tau: float) -> np.ndarray:
     """
@@ -111,7 +109,7 @@ rho = np.full((ny, nx), rho0) # Set initial density
 
 f = feq(rho, u, e, w) # Initialize the distribution function
 
-def benchmark(f: np.ndarray) -> None:
+def benchmark(f: np.ndarray, N: int) -> None:
     print("Starting simulation...")
     start = time.perf_counter()
     for _ in tqdm(range(N), desc = "Time steps"):
@@ -126,37 +124,88 @@ def benchmark(f: np.ndarray) -> None:
     mlups = N * nx * ny / ((end - start) * 1e6)
     print(f"Performance: {mlups:.2f} MLUPS")
 
-def visualize(f: np.ndarray) -> None:
+def visualize(f: np.ndarray, N: int, steps_per_frame: int = 10, fps: int = 30) -> None:
     """
     Function to visualize the simulation using matplotlib
-    CURRENTLY NOT FINISHED, NEEDS TO BE IMPLEMENTED
     """
+    # Number of frames for the animation
+    num_frames = N // steps_per_frame
+    interval = 1000 / fps
+
     # Initial macroscopic variables
     rho, u = macro(f, e)
 
-    # Initial velocity magnitude for visualization
+    # Initial velocity magnitude and vorticity for visualization
     vel_mag = np.linalg.norm(u, axis = -1)
+    omega = np.gradient(u[..., 1], axis = 1) - np.gradient(u[..., 0], axis = 0)
+    norm = TwoSlopeNorm(vmin = -max(omega.max(), 1e-12), vcenter = 0.0, vmax = max(omega.max(), 1e-12))
 
     # Mask for the solid obstacle
-    vel_mag[solid] = np.ma.masked_where(solid, vel_mag)
+    vel_mag = np.ma.masked_where(solid, vel_mag)
+    omega = np.ma.masked_where(solid, omega)
 
     # Create figure and axis for animation
-    fig, (ax1, ax2) = ...
+    fig, (ax_vel, ax2_vort) = plt.subplots(2, 1, figsize = (12, 5))
+
+    # Plotting the velocity
+    vel_plot = ax_vel.imshow(vel_mag, cmap = 'jet', aspect = 'auto', vmin=0.0, vmax = max(vel_mag.max(), 1e-12), origin = 'lower')
+    ax_vel.contour(solid, colors = 'black', levels = [0.5], linewidths = 1.5)
+    vel_colorbar = fig.colorbar(vel_plot, ax = ax_vel)
+    vel_colorbar.set_label('Velocity Magnitude', rotation = 270, labelpad = 15)
+    ax_vel.set_xlabel('x')
+    ax_vel.set_ylabel('y')
+
+    # Plotting the vorticity
+    vort_plot = ax2_vort.imshow(omega, cmap = 'RdBu_r', aspect = 'auto', 
+                                origin = 'lower', norm = norm)
+    ax2_vort.contour(solid, colors = 'black', levels = [0.5], linewidths = 1.5)
+    vort_colorbar = fig.colorbar(vort_plot, ax = ax2_vort)
+    vort_colorbar.set_label('Vorticity', rotation = 270, labelpad = 15)
+    ax2_vort.set_xlabel('x')
+    ax2_vort.set_ylabel('y')
+
+    def update(frame: int) -> None:
+        nonlocal f
+        for _ in range(steps_per_frame):
+            f = step(f)
+
+        current_step = (frame + 1) * steps_per_frame
+
+        # Update macroscopic variables
+        rho, u = macro(f, e)
+
+        # Update velocity magnitude and vorticity for visualization
+        vel_mag = np.linalg.norm(u, axis = -1)  
+        vel_mag = np.ma.masked_where(solid, vel_mag)
+        vel_plot.set_data(vel_mag)
+        if vel_mag.max() > 0:
+            vel_plot.set_clim(vmin = 0, vmax = vel_mag.max())
+
+        omega = np.gradient(u[..., 1], axis = 1) - np.gradient(u[..., 0], axis = 0)
+        omega = np.ma.masked_where(solid, omega)
+        vort_plot.set_data(omega)
+        if omega.max() > 0:
+            vort_plot.set_clim(vmin = -omega.max(), vmax = omega.max())
+
+        return vel_plot, vort_plot
+    ani = FuncAnimation(fig, update, frames = num_frames, interval = interval, blit = True, repeat = False)
+    plt.tight_layout()
+    plt.show()
 
 
-
-def main(f: np.ndarray, run: str) -> None:
+def main(f: np.ndarray, run: str, N: int) -> None:
     # Main function to run the Lattice Boltzmann simulation
+    assert run in ["test", "visualize"], "Invalid run argument. Use 'test' or 'visualize'."
+    assert N is not None and N > 0, "N must be provided as a positive integer."
+
     if run == "test":
-        benchmark(f)
+        benchmark(f, N)
     elif run == "visualize":
-        raise NotImplementedError("Visualization is not yet implemented.")
-        # visualize(f)
-    else:
-        print("Please provide a valid argument: 'test' for benchmarking or 'visualize' for visualization.")
+        visualize(f, N, steps_per_frame = 2)
 
 
 if __name__ == "__main__":
     # Getting the run argument from command line
     run = sys.argv[1] if len(sys.argv) > 1 else None
-    main(f, run)
+    N = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    main(f, run, N)

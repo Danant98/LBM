@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+"""
+TO DO:
+- Add Numba implementation
+- Restructure code in different modules
+"""
+
 # Importing libraries and modules
 import time, sys
 from matplotlib.colors import TwoSlopeNorm

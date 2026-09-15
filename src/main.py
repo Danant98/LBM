@@ -19,9 +19,9 @@ from numba import njit, prange
 # Defining constants 
 nx, ny = 400, 100 # Number of nodes in each direction
 
-tau = 0.55 # Collision timescale
+tau = 0.8 # Collision timescale
 rho0 = 0.5 # Average fluid density
-u0 = 0.1 # Initial velocity in x-direction
+u0 = 0.03 # Initial velocity in x-direction
 
 nl = 9 # Number of lattice speed directions
 N = 1000 # Number of time steps
@@ -270,7 +270,7 @@ def visualize(f: np.ndarray, N: int, steps_per_frame: int = 10, fps: int = 30, s
     fig, (ax_vel, ax2_vort) = plt.subplots(2, 1, figsize = (12, 5))
 
     # Plotting the velocity
-    vel_plot = ax_vel.imshow(vel_mag, cmap = 'jet', aspect = 'auto', vmin=0.0, vmax = max(vel_mag.max(), 1e-12), origin = 'lower')
+    vel_plot = ax_vel.imshow(vel_mag, cmap = 'RdBu_r', aspect = 'auto', vmin=0.0, vmax = max(vel_mag.max(), 1e-12), origin = 'lower')
     ax_vel.contour(solid, colors = 'black', levels = [0.5], linewidths = 1.5)
     vel_colorbar = fig.colorbar(vel_plot, ax = ax_vel)
     vel_colorbar.set_label('Velocity Magnitude', rotation = 270, labelpad = 15)
